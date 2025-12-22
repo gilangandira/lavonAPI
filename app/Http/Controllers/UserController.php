@@ -29,7 +29,7 @@ class UserController extends Controller
             'name'     => 'required|string|max:255',
             'email'    => 'required|email|unique:users,email',
             'password' => 'required|min:6',
-            'role'     => 'required|in:seller,marketing,admin',
+            'role'     => 'required|in:sales,finance,admin',
         ]);
 
         $user = User::create([
@@ -73,7 +73,7 @@ class UserController extends Controller
         $request->validate([
             'name'  => 'required|string|max:255',
             'email' => 'required|email|unique:users,email,' . $id,
-            'role'  => 'required|in:seller,marketing,admin',
+            'role'  => 'required|in:sales,finance,admin',
         ]);
 
         $user->name  = $request->name;
