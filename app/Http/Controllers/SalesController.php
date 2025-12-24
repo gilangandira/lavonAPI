@@ -120,10 +120,18 @@ class SalesController extends Controller
                 $rate = isset($data['interest_rate']) ? $data['interest_rate'] : 0;
                 
                 if ($rate > 0) {
-                    $years = $data['cicilan_count'] / 12;
-                    $totalInterest = $remaining * ($rate / 100) * $years;
-                    $totalLoan = $remaining + $totalInterest;
-                    $data['monthly_installment'] = $totalLoan / $data['cicilan_count'];
+                    $r = ($rate / 12) / 100; // Monthly rate decimal
+                    $n = $data['cicilan_count']; // Months
+                    $P = $remaining;
+
+                    // PMT Formula: P * r * (1+r)^n / ((1+r)^n - 1)
+                    if ($r == 0) {
+                        $monthlyPayment = $P / $n;
+                    } else {
+                        $monthlyPayment = ($P * $r * pow(1 + $r, $n)) / (pow(1 + $r, $n) - 1);
+                    }
+
+                    $data['monthly_installment'] = $monthlyPayment;
                 } else {
                     $data['monthly_installment'] = $remaining / $data['cicilan_count'];
                 }
