@@ -305,6 +305,29 @@ class SalesController extends Controller
             // Allow direct override of payment_amount if provided (and not just adding)
             if ($request->has('payment_amount')) {
                 $sale->payment_amount = $request->payment_amount;
+                
+                // Recalculate Monthly Installment if DP changed
+                if ($sale->cicilan_count > 0) {
+                     $remaining = $sale->price - $sale->payment_amount;
+                     if ($remaining > 0) {
+                         $rate = $sale->interest_rate ?? 0;
+                         if ($rate > 0) {
+                             $r = ($rate / 12) / 100;
+                             $n = $sale->cicilan_count;
+                             // PMT
+                             if ($r == 0) {
+                                  $sale->monthly_installment = $remaining / $n;
+                             } else {
+                                  // Avoid division by zero if (1+r)^n - 1 is 0 (impossible if r>0, n>0)
+                                  $sale->monthly_installment = ($remaining * $r * pow(1 + $r, $n)) / (pow(1 + $r, $n) - 1);
+                             }
+                         } else {
+                             $sale->monthly_installment = $remaining / $sale->cicilan_count;
+                         }
+                     } else {
+                         $sale->monthly_installment = 0;
+                     }
+                }
             }
 
             if ($request->has('price')) {
