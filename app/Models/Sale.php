@@ -23,6 +23,21 @@ class Sale extends Model
         'payment_method',
     ];
 
+    public function customer()
+    {
+        return $this->belongsTo(Customer::class);
+    }
+
+    public function cluster()
+    {
+        return $this->belongsTo(Cluster::class);
+    }
+
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function payments()
     {
         return $this->hasMany(Payment::class);
@@ -32,11 +47,18 @@ class Sale extends Model
 
     public function getPaidPrincipalAttribute()
     {
+        // Use eager loaded relation if available to avoid N+1, otherwise query
+        if ($this->relationLoaded('payments')) {
+            return $this->payments->sum('principal_amount');
+        }
         return $this->payments()->sum('principal_amount');
     }
 
     public function getPaidInterestAttribute()
     {
+        if ($this->relationLoaded('payments')) {
+            return $this->payments->sum('interest_amount');
+        }
         return $this->payments()->sum('interest_amount');
     }
 
