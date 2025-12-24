@@ -23,26 +23,21 @@ class Sale extends Model
         'payment_method',
     ];
 
-    protected $appends = ['payment_status_info'];
-
-    public function customer()
-    {
-        return $this->belongsTo(Customer::class);
-    }
-
-    public function cluster()
-    {
-        return $this->belongsTo(Cluster::class);
-    }
-
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
-
     public function payments()
     {
         return $this->hasMany(Payment::class);
+    }
+
+    protected $appends = ['payment_status_info', 'paid_principal', 'paid_interest'];
+
+    public function getPaidPrincipalAttribute()
+    {
+        return $this->payments()->sum('principal_amount');
+    }
+
+    public function getPaidInterestAttribute()
+    {
+        return $this->payments()->sum('interest_amount');
     }
 
     public function getPaymentStatusInfoAttribute()
