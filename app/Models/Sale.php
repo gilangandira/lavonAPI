@@ -19,6 +19,7 @@ class Sale extends Model
         'payment_amount',
         'cicilan_count',
         'monthly_installment',
+        'interest_rate',
         'payment_method',
     ];
 

@@ -89,6 +89,7 @@ class SalesController extends Controller
             'booking_date'   => 'required|date',
             'payment_amount' => 'required|numeric',
             'cicilan_count'  => 'required|integer',
+            'interest_rate'  => 'nullable|numeric|min:0',
             'locked_type'    => 'nullable|string', 
         ]);
 
@@ -115,7 +116,17 @@ class SalesController extends Controller
         if ($data['cicilan_count'] > 0) {
             $remaining = $data['price'] - $data['payment_amount'];
             if ($remaining > 0) {
-                $data['monthly_installment'] = $remaining / $data['cicilan_count'];
+                // Interest logic
+                $rate = isset($data['interest_rate']) ? $data['interest_rate'] : 0;
+                
+                if ($rate > 0) {
+                    $years = $data['cicilan_count'] / 12;
+                    $totalInterest = $remaining * ($rate / 100) * $years;
+                    $totalLoan = $remaining + $totalInterest;
+                    $data['monthly_installment'] = $totalLoan / $data['cicilan_count'];
+                } else {
+                    $data['monthly_installment'] = $remaining / $data['cicilan_count'];
+                }
             } else {
                 $data['monthly_installment'] = 0;
             }
@@ -170,7 +181,7 @@ class SalesController extends Controller
         ]);
 
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $sale) {
-            $data = $request->only(['price', 'payment_amount', 'status', 'add_payment']);
+            $data = $request->only(['price', 'payment_amount', 'status', 'add_payment', 'interest_rate']);
 
             // Handle Add Payment
             if ($request->has('add_payment') && $request->add_payment > 0) {
