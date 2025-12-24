@@ -82,41 +82,55 @@ class CustomersController extends Controller
             'cicilan'   => 'nullable|integer',
             'cluster_id'=> 'required|exists:clusters,id',
             'payment_method' => 'nullable|string',
-            'payment_amount' => 'nullable|numeric|min:0'
+            'payment_amount' => 'nullable|numeric|min:0',
+            'interest_rate'  => 'nullable|numeric|min:0'
         ]);
 
-        $customer = Customer::create($request->all());
+        $customer = Customer::create($request->except('interest_rate')); // Do not save interest_rate to customer
 
-        // Automatically create Sale if Booked or Deposited
         // Automatically create Sale if Booked or Deposited
         if (in_array($request->criteria, ['Booked', 'Deposited'])) {
              $cluster = Cluster::find($request->cluster_id);
              if ($cluster) {
                  $paymentAmount = $request->payment_amount ?? 0;
                  $cicilanCount = $request->cicilan ?? 0;
+                 $interestRate = $request->interest_rate ?? 0;
 
                  // Calculate Monthly Installment
                  $monthlyInstallment = 0;
                  if ($cicilanCount > 0) {
                      $remaining = $cluster->price - $paymentAmount;
                      if ($remaining > 0) {
-                         $monthlyInstallment = $remaining / $cicilanCount;
+                         // Interest Logic (Annuity)
+                         if ($interestRate > 0) {
+                             $r = ($interestRate / 12) / 100;
+                             $n = $cicilanCount;
+                             if ($r == 0) {
+                                 $monthlyInstallment = $remaining / $n;
+                             } else {
+                                 // PMT
+                                 $monthlyInstallment = ($remaining * $r * pow(1 + $r, $n)) / (pow(1 + $r, $n) - 1);
+                             }
+                         } else {
+                             $monthlyInstallment = $remaining / $cicilanCount;
+                         }
                      }
                  }
                  
                  $sale = \App\Models\Sale::create([
-                     'user_id' => $request->user()->id ?? 1, // Fallback if no auth
+                     'user_id' => $request->user()->id ?? 1,
                      'customer_id' => $customer->id,
                      'cluster_id' => $cluster->id,
                      'locked_type' => $cluster->type,
                      'price' => $cluster->price,
-                     'status' => $request->criteria, // 'Booked' or 'Deposited'
+                     'status' => $request->criteria,
                      'sale_date' => now(),
                      'booking_date' => now(),
                      'payment_amount' => $paymentAmount,
                      'cicilan_count' => $cicilanCount,
-                     'payment_method' => $request->payment_method ?? 'Cash', // Save method
-                     'monthly_installment' => $monthlyInstallment, 
+                     'payment_method' => $request->payment_method ?? 'Cash',
+                     'monthly_installment' => $monthlyInstallment,
+                     'interest_rate' => $interestRate
                  ]);
 
                  // Create Payment Record if amount > 0

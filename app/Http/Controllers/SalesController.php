@@ -188,6 +188,7 @@ class SalesController extends Controller
             'payment_amount' => 'sometimes|numeric',
             'add_payment'    => 'sometimes|numeric', 
             'status'         => 'sometimes|string',
+            'interest_rate'  => 'sometimes|numeric|min:0',
         ]);
 
         return \Illuminate\Support\Facades\DB::transaction(function () use ($request, $sale) {
@@ -302,11 +303,18 @@ class SalesController extends Controller
                 }
             }
 
+            // Update Interest Rate if provided
+            if ($request->has('interest_rate')) {
+                $sale->interest_rate = $request->interest_rate;
+            }
+
             // Allow direct override of payment_amount if provided (and not just adding)
             if ($request->has('payment_amount')) {
                 $sale->payment_amount = $request->payment_amount;
-                
-                // Recalculate Monthly Installment if DP changed
+            }
+
+            // Recalculate Monthly Installment if DP OR Interest Rate changed
+            if ($request->has('payment_amount') || $request->has('interest_rate')) {
                 if ($sale->cicilan_count > 0) {
                      $remaining = $sale->price - $sale->payment_amount;
                      if ($remaining > 0) {
@@ -318,10 +326,10 @@ class SalesController extends Controller
                              if ($r == 0) {
                                   $sale->monthly_installment = $remaining / $n;
                              } else {
-                                  // Avoid division by zero if (1+r)^n - 1 is 0 (impossible if r>0, n>0)
                                   $sale->monthly_installment = ($remaining * $r * pow(1 + $r, $n)) / (pow(1 + $r, $n) - 1);
                              }
                          } else {
+                             // If rate is 0, simple division
                              $sale->monthly_installment = $remaining / $sale->cicilan_count;
                          }
                      } else {
