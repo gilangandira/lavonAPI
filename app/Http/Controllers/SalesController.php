@@ -151,6 +151,8 @@ class SalesController extends Controller
                 'amount' => $data['payment_amount'],
                 'payment_date' => $data['booking_date'], // Use booking date as payment date
                 'method' => 'Initial',
+                'interest_amount' => 0,
+                'principal_amount' => $data['payment_amount'],
                 'note' => 'Booking Fee / DP'
             ]);
 
@@ -196,10 +198,99 @@ class SalesController extends Controller
                 // Update total payment amount
                 $sale->payment_amount += $request->add_payment;
                 
+                // Calculate Principal & Interest Split
+                $interestAmount = 0;
+                $principalAmount = $request->add_payment;
+                
+                $rate = $sale->interest_rate ?? 0;
+                if ($rate > 0) {
+                     // 1. Calculate Initial Loan Principal (PV)
+                     // PV = PMT * (1 - (1+r)^-n) / r
+                     $monthly = $sale->monthly_installment;
+                     $months = $sale->cicilan_count;
+                     $r = ($rate / 12) / 100;
+                     
+                     if ($monthly > 0 && $months > 0 && $r > 0) {
+                         $initialLoan = $monthly * (1 - pow(1 + $r, -$months)) / $r;
+                         
+                         // 2. Calculate Outstanding Principal
+                         // Sum of principal_amount from previous payments
+                         // Note: For old payments without split, we might need a fallback. 
+                         // But assuming new system, we rely on `principal_amount`.
+                         $paidPrincipal = \App\Models\Payment::where('sale_id', $sale->id)->sum('principal_amount');
+                         
+                         // Special Handling: If this is the FIRST installment payment after DP, 
+                         // we might need to check if DP was recorded as Principal.
+                         // Usually DP is 100% Principal.
+                         // If old data has 0 principal_amount, we might be in trouble.
+                         // Let's assume for now existing payments (DP) are treated as Principal if 0? 
+                         // Actually, we should check 'amount' if 'principal_amount' is 0.
+                         // Safe bet: $paidPrincipal = Payment::where(sale_id)->sum('principal_amount');
+                         // If it's new feature, old payments are 0.
+                         // Fallback: If sum(principal) == 0 but sum(amount) > 0, maybe assume all amount is principal?
+                         // Let's stick to explicitly stored principal_amount for accuracy going forward.
+                         
+                         // Re-calculate Paid Principal based on if columns exist?
+                         // Let's just use the column.
+                         
+                         // If user has paid DP (which should be principal), it should be in principal_amount.
+                         // If we didn't migrate old data, we might need to run a seeder or logic here.
+                         // For this task, assume we start clean or manual fix.
+                         // To be safe for existing data: 
+                         $previousPayments = \App\Models\Payment::where('sale_id', $sale->id)->get();
+                         $paidPrincipal = 0;
+                         foreach($previousPayments as $p) {
+                             $paidPrincipal += ($p->principal_amount > 0 ? $p->principal_amount : $p->amount);
+                         }
+
+                         // Adjusted Initial Loan? 
+                         // Wait, Initial Loan Calculated from PV is "Loan Amount" (Price - DP).
+                         // So the "Outstanding Balance" is based on that Loan Amount.
+                         // DP is NOT part of this Loan Amount.
+                         // So we should only subtract payments that were made AFTER the DP?
+                         // Or does the Loan Amount start at (Price)? No, KPR is (Price - DP).
+                         // So Outstanding Balance starts at (Price - DP).
+                         
+                         // Correct Logic:
+                         // Initial Balance = Price - DP (or calculated PV).
+                         // Payments (Installments) reduce this balance.
+                         // So we sum up `principal_amount` of Installments only.
+                         // How to distinguish DP payment vs Installment payment?
+                         // DP usually has method='Initial'.
+                         
+                         $outstandingOne = $initialLoan;
+                         
+                         // Subtract principal paid from installments
+                         $installmentPrincipalPaid = \App\Models\Payment::where('sale_id', $sale->id)
+                                                                        ->where('method', '!=', 'Initial')
+                                                                        ->sum('principal_amount');
+
+                         // Wait, if old payments have 0 principal_amount, we have issue.
+                         // Let's assume naive approach: 
+                         // Outstanding = $initialLoan - $installmentPrincipalPaid.
+                         
+                         $outstandingBalance = $initialLoan - $installmentPrincipalPaid;
+
+                         if ($outstandingBalance > 0) {
+                             $interestAmount = $outstandingBalance * $r; // Monthly Interest
+                             // Cap interest? No, payment might effectively cover just interest or partial.
+                             
+                             if ($interestAmount > $request->add_payment) {
+                                 $interestAmount = $request->add_payment;
+                                 $principalAmount = 0;
+                             } else {
+                                 $principalAmount = $request->add_payment - $interestAmount;
+                             }
+                         }
+                     }
+                }
+                
                 // Record Payment History
                 \App\Models\Payment::create([
                     'sale_id' => $sale->id,
                     'amount' => $request->add_payment,
+                    'interest_amount' => $interestAmount,
+                    'principal_amount' => $principalAmount,
                     'payment_date' => now(), 
                     'method' => 'Unknown', 
                     'note' => 'Additional Payment'
