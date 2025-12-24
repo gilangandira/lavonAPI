@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ClustersController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\CommissionsController;
 
 
 Route::post('/login', [AuthController::class, 'login']);
@@ -70,4 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Rankings
     Route::get('/rankings', [\App\Http\Controllers\RankController::class, 'index'])->middleware('role:admin');
+
+    // Commissions
+    Route::get('/commissions', [CommissionsController::class, 'index'])->middleware('role:admin');
 });
